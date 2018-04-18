@@ -751,8 +751,9 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 	}
   }
 
-  if (RedLEDDelay == 0)
+  if (RedLEDDelay == 1)
   {
+  	RedLEDDelay = 0;
   	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
   }
 }
@@ -760,7 +761,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 
 void CDC_UpdateTimer(void)
 {
-	if (RedLEDDelay)
+	if (RedLEDDelay > 1)
 		RedLEDDelay--;
 }
 /**
