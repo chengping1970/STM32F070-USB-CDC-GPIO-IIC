@@ -132,6 +132,7 @@ uint8_t ResponeBuffer[CDC_I2C_MAX_PACKETS][CDC_I2C_PACKET_SZ];
 
 uint32_t XferDelay = 9600;
 
+uint32_t YellowDelay = 0;
 uint32_t RedLEDDelay = 0;
 /* USER CODE BEGIN PRIVATE_VARIABLES */
 static const char *g_fwVersion = "AUC-20180408";
@@ -493,7 +494,6 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 	
 	_SWI2C_Start();
 
-	/*
 	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
 	{
 		result = _SWI2C_WriteByte(Addr);
@@ -511,9 +511,9 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 		}
 
 		_SWI2C_Start(); // restart
-	}*/
+	}
 
-	//if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) != CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS)
+	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) == 0)
 	{
 		result = _SWI2C_WriteByte(Addr|0x01);
 		if (result != HAL_OK)
@@ -540,16 +540,8 @@ static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pD
 	HAL_StatusTypeDef result;
 	
 	_SWI2C_Start();
-	//if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) != CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS)
-	{
-		result = _SWI2C_WriteByte(Addr);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
-	}
-	/*if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
+
+	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) == 0)
 	{
 		result = _SWI2C_WriteByte(SubAddr);
 		if (result != HAL_OK)
@@ -557,7 +549,70 @@ static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pD
 			_SWI2C_Stop();
 			return result;
 		}
-	}*/
+	}
+	
+	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
+	{
+		result = _SWI2C_WriteByte(SubAddr);
+		if (result != HAL_OK)
+		{
+			_SWI2C_Stop();
+			return result;
+		}
+	}
+	
+	for (i = 0; i < Length; i++)
+	{
+		result = _SWI2C_WriteByte(pData[i]);
+		if (result != HAL_OK)
+		{
+			_SWI2C_Stop();
+			return result;
+		}
+	}
+	_SWI2C_Stop();
+	return result;
+}
+
+static HAL_StatusTypeDef SWI2C_XferRead(uint8_t Addr, uint8_t * pData, uint8_t Length, uint8_t Option)
+{
+	uint8_t i;
+	HAL_StatusTypeDef result;
+	
+	_SWI2C_Start();
+
+	result = _SWI2C_WriteByte(Addr|0x01);
+	if (result != HAL_OK)
+	{
+		_SWI2C_Stop();
+		return result;
+	}
+	
+	for (i = 0; i < Length; i++)
+	{
+		if (i == (Length - 1))
+			pData[i] = _SWI2C_ReadByte(0);
+		else
+			pData[i] = _SWI2C_ReadByte(1);
+	}
+	_SWI2C_Stop();
+	return result;
+}
+
+static HAL_StatusTypeDef SWI2C_XferWrite(uint8_t Addr, uint8_t * pData, uint8_t Length, uint8_t Option)
+{		
+	uint8_t i;
+	HAL_StatusTypeDef result;
+	
+	_SWI2C_Start();
+	
+	result = _SWI2C_WriteByte(Addr);
+	if (result != HAL_OK)
+	{
+		_SWI2C_Stop();
+		return result;
+	}
+		
 	for (i = 0; i < Length; i++)
 	{
 		result = _SWI2C_WriteByte(pData[i]);
@@ -686,7 +741,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 					uint8_t Retry = I2C_RERY_COUNT;
 					while (Retry--)
 					{
-						Ret = SWI2C_Write(pXfrParam->slaveAddr<<1, 0, (uint8_t *)&pXfrParam->data[0], (uint8_t)pXfrParam->txLength, pXfrParam->options);
+						Ret = SWI2C_XferWrite(pXfrParam->slaveAddr<<1, (uint8_t *)&pXfrParam->data[0], (uint8_t)pXfrParam->txLength, pXfrParam->options);
 						if (Ret == HAL_OK)
 						{
 							pCDCI2CInput->resp = CDC_I2C_RES_OK;
@@ -706,7 +761,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 							uint8_t Retry = I2C_RERY_COUNT;
 							while (Retry--)
 							{
-								Ret = SWI2C_Read(pXfrParam->slaveAddr<<1, 0, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pXfrParam->rxLength, pXfrParam->options);
+								Ret = SWI2C_XferRead(pXfrParam->slaveAddr<<1, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pXfrParam->rxLength, pXfrParam->options);
 								if (Ret == HAL_OK)
 								{
 									pCDCI2CInput->resp = CDC_I2C_RES_OK;
@@ -724,6 +779,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 				}	
 				if (pCDCI2CInput->resp == CDC_I2C_RES_OK)
 				{
+					YellowDelay = 200;
 					HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_0);
 				}
 				else
@@ -764,6 +820,11 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 	}
   }
 
+  if (YellowDelay == 1)
+  {
+  	YellowDelay = 0;
+  	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);
+  }
   if (RedLEDDelay == 1)
   {
   	RedLEDDelay = 0;
@@ -774,6 +835,8 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 
 void CDC_UpdateTimer(void)
 {
+	if (YellowDelay > 1)
+		YellowDelay--;
 	if (RedLEDDelay > 1)
 		RedLEDDelay--;
 }
