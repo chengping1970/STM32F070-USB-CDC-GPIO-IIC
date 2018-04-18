@@ -492,6 +492,24 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 	HAL_StatusTypeDef result;
 	
 	_SWI2C_Start();
+
+	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
+	{
+		result = _SWI2C_WriteByte(Addr);
+		if (result != HAL_OK)
+		{
+			_SWI2C_Stop();
+			return result;
+		}
+
+		result = _SWI2C_WriteByte(SubAddr);
+		if (result != HAL_OK)
+		{
+			_SWI2C_Stop();
+			return result;
+		}
+	}
+
 	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) != CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS)
 	{
 		result = _SWI2C_WriteByte(Addr|0x01);
@@ -501,15 +519,7 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 			return result;
 		}
 	}
-	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
-	{
-		result = _SWI2C_WriteByte(SubAddr);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
-	}
+	
 	for (i = 0; i < Length; i++)
 	{
 		if (i == (Length - 1))
