@@ -441,6 +441,7 @@ static HAL_StatusTypeDef _SWI2C_WriteByte(uint8_t Value)
 	HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
 	for (count = 0;count < 20;count++)
 	{
+		_SCL_Delay_Short();
 		if (HAL_GPIO_ReadPin(IIC_SDA_PORT, IIC_SDA_PIN) == 0)
 		{
 			HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
@@ -474,12 +475,16 @@ static uint8_t _SWI2C_ReadByte(uint8_t SendAck)
 		value = (value<<1)|read;
 		HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
 		_SCL_Delay_Short();
-	}	
+	}		
+	_SetSDAOutput();
 	if (SendAck)
 	{
-		_SetSDAOutput();
 		HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_RESET);
 	}
+	else
+	{
+		HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_SET);
+	}		
 	HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
 	_SCL_Delay();
 	HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
