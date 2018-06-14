@@ -492,40 +492,34 @@ static uint8_t _SWI2C_ReadByte(uint8_t SendAck)
 	return value;
 }
 
-static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pData, uint8_t Length, uint8_t Option)
+static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pData, uint8_t Length)
 {
 	uint8_t i;
 	HAL_StatusTypeDef result;
 	
 	_SWI2C_Start();
 
-	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
+	result = _SWI2C_WriteByte(Addr);
+	if (result != HAL_OK)
 	{
-		result = _SWI2C_WriteByte(Addr);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
-
-		result = _SWI2C_WriteByte(SubAddr);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
-
-		_SWI2C_Start(); // restart
+		_SWI2C_Stop();
+		return result;
 	}
 
-	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) == 0)
+	result = _SWI2C_WriteByte(SubAddr);
+	if (result != HAL_OK)
 	{
-		result = _SWI2C_WriteByte(Addr|0x01);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
+		_SWI2C_Stop();
+		return result;
+	}
+
+	_SWI2C_Start(); // restart
+
+	result = _SWI2C_WriteByte(Addr|0x01);
+	if (result != HAL_OK)
+	{
+		_SWI2C_Stop();
+		return result;
 	}
 	
 	for (i = 0; i < Length; i++)
@@ -539,31 +533,25 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 	return result;
 }
 
-static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pData, uint8_t Length, uint8_t Option)
+static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pData, uint8_t Length)
 {		
 	uint8_t i;
 	HAL_StatusTypeDef result;
 	
 	_SWI2C_Start();
 
-	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) == 0)
+	result = _SWI2C_WriteByte(Addr);
+	if (result != HAL_OK)
 	{
-		result = _SWI2C_WriteByte(Addr);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
+		_SWI2C_Stop();
+		return result;
 	}
 	
-	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
+	result = _SWI2C_WriteByte(SubAddr);
+	if (result != HAL_OK)
 	{
-		result = _SWI2C_WriteByte(SubAddr);
-		if (result != HAL_OK)
-		{
-			_SWI2C_Stop();
-			return result;
-		}
+		_SWI2C_Stop();
+		return result;
 	}
 	
 	for (i = 0; i < Length; i++)
@@ -579,7 +567,7 @@ static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pD
 	return result;
 }
 
-static HAL_StatusTypeDef SWI2C_XferRead(uint8_t Addr, uint8_t * pData, uint8_t Length)
+/*static HAL_StatusTypeDef SWI2C_XferRead(uint8_t Addr, uint8_t * pData, uint8_t Length)
 {
 	uint8_t i;
 	HAL_StatusTypeDef result;
@@ -629,7 +617,7 @@ static HAL_StatusTypeDef SWI2C_XferWrite(uint8_t Addr, uint8_t * pData, uint8_t 
 	}
 	_SWI2C_Stop();
 	return result;
-}
+}*/
 
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
@@ -697,7 +685,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 					uint8_t Retry = I2C_RERY_COUNT;
 					while (Retry--)
 					{
-						Ret = SWI2C_Write(pWriteParam->slaveAddr<<1, 0, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pWriteParam->length, pWriteParam->options);
+						Ret = SWI2C_Write(pWriteParam->slaveAddr, pWriteParam->SubAddr, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pWriteParam->length);
 						if (Ret == HAL_OK)
 						{
 							pCDCI2CInput->resp = CDC_I2C_RES_OK;
@@ -721,11 +709,11 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 					uint8_t Retry = I2C_RERY_COUNT;
 					while (Retry--)
 					{
-						Ret = SWI2C_Read(pReadParam->slaveAddr<<1, 0, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pReadParam->length, pReadParam->options);
+						Ret = SWI2C_Read(pReadParam->slaveAddr, pReadParam->SubAddr, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pReadParam->length);
 						if (Ret == HAL_OK)
 						{
 							pCDCI2CInput->resp = CDC_I2C_RES_OK;
-							pCDCI2CInput->length += pReadParam->length;	
+							pCDCI2CInput->length += pReadParam->length;
 							break;
 						}
 						CDC_Delay(I2C_RETRY_DELAY);
@@ -746,7 +734,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 					uint8_t Retry = I2C_RERY_COUNT;
 					while (Retry--)
 					{
-						Ret = SWI2C_XferWrite(pXfrParam->slaveAddr<<1, (uint8_t *)&pXfrParam->data[0], (uint8_t)pXfrParam->txLength);
+						Ret = SWI2C_Write(pXfrParam->slaveAddr, pXfrParam->SubAddr, (uint8_t *)&pXfrParam->data[0], (uint8_t)pXfrParam->txLength);
 						if (Ret == HAL_OK)
 						{
 							pCDCI2CInput->resp = CDC_I2C_RES_OK;
@@ -766,7 +754,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 							uint8_t Retry = I2C_RERY_COUNT;
 							while (Retry--)
 							{
-								Ret = SWI2C_XferRead(pXfrParam->slaveAddr<<1, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pXfrParam->rxLength);
+								Ret = SWI2C_Read(pXfrParam->slaveAddr, 0x04, (uint8_t *)&pCDCI2CInput->data[0], (uint8_t)pXfrParam->rxLength);
 								if (Ret == HAL_OK)
 								{
 									pCDCI2CInput->resp = CDC_I2C_RES_OK;

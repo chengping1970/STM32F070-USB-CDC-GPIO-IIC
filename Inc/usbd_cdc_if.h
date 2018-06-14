@@ -199,8 +199,8 @@ typedef struct __CDCI2C_IN_REPORT {
 typedef struct __CDCI2C_XFER_PARAMS {
 	uint8_t txLength;	/*!< Length of the Tx transfer.*/
 	uint8_t rxLength;	/*!< Length of the Rx transfer. */
-	uint8_t options;	/*!< check @ref I2C_FAST_XFER_OPTIONS. */
-	uint8_t slaveAddr;	/*!< I2C slave device address. */
+	uint8_t slaveAddr;	/*!< I2C slave device address. */	
+	uint8_t SubAddr;	/*!< I2C slave sub address. */
 	uint8_t data[];		/*!< Data corresponding to the response */
 
 } CDC_I2C_XFER_PARAMS_T;
@@ -218,9 +218,10 @@ typedef struct __CDCI2C_PortConfig_t {
  *  Defines the structure of CDC to I2C read-write transfer parameters.
  */
 typedef struct __CDCI2C_RW_PARAMS {
-	uint16_t length;	/*!< Length of the transfer.*/
+	uint8_t length;	/*!< Length of the transfer.*/
 	uint8_t options;	/*!< check @ref I2C_IO_OPTIONS. */
 	uint8_t slaveAddr;	/*!< I2C slave device address. */
+	uint8_t SubAddr;	/*!< I2C slave sub address. */
 	uint8_t data[];		/*!< Data corresponding to the response */
 
 } CDC_I2C_RW_PARAMS_T;
