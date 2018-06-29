@@ -135,7 +135,7 @@ uint32_t XferDelay = 9600;
 uint32_t YellowDelay = 0;
 uint32_t RedLEDDelay = 0;
 /* USER CODE BEGIN PRIVATE_VARIABLES */
-static const char *g_fwVersion = "AUC-20180408";
+static const char *g_fwVersion = "AUC-20180628";
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -619,6 +619,19 @@ static HAL_StatusTypeDef SWI2C_XferWrite(uint8_t Addr, uint8_t * pData, uint8_t 
 	return result;
 }*/
 
+static void _I2C_FlashLED(uint8_t resp)
+{
+	if (resp == CDC_I2C_RES_OK)
+	{
+		YellowDelay = 200;
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_0);
+	}
+	else
+	{
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
+		RedLEDDelay = 200;
+	}
+}
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */
 #define I2C_RETRY_DELAY  9600
@@ -663,7 +676,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 				pCDCI2CInput->length = CDC_I2C_HEADER_SZ + strlen(g_fwVersion);
 				{
 					pIWDG->Instance = IWDG;
-					pIWDG->Init.Prescaler = IWDG_PRESCALER_32;
+					pIWDG->Init.Prescaler = IWDG_PRESCALER_64;
 					pIWDG->Init.Window = 4095;
 					pIWDG->Init.Reload = 4095;
 					if (HAL_IWDG_Init(pIWDG) != HAL_OK)
@@ -694,6 +707,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 						CDC_Delay(I2C_RETRY_DELAY);
 					}
 				}
+				_I2C_FlashLED(pCDCI2CInput->resp);
 				HAL_IWDG_Refresh(pIWDG);
 			}
 			break;
@@ -719,6 +733,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 						CDC_Delay(I2C_RETRY_DELAY);
 					}
 				}
+				_I2C_FlashLED(pCDCI2CInput->resp);
 				HAL_IWDG_Refresh(pIWDG);
 			}
 			break;
@@ -770,16 +785,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 				{
 					pCDCI2CInput->resp = CDC_I2C_RES_SLAVE_NAK;
 				}	
-				if (pCDCI2CInput->resp == CDC_I2C_RES_OK)
-				{
-					YellowDelay = 200;
-					HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_0);
-				}
-				else
-				{
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-					RedLEDDelay = 200;
-				}
+				_I2C_FlashLED(pCDCI2CInput->resp);
 				HAL_IWDG_Refresh(pIWDG);
 			}
 			break;

@@ -128,6 +128,7 @@ int main(void)
 
   /* USER CODE END WHILE */
     CDC_I2C_Process(&hiwdg);
+    HAL_IWDG_Refresh(&hiwdg);
   /* USER CODE BEGIN 3 */
 
   }
