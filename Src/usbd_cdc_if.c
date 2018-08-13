@@ -662,6 +662,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 		case CDC_I2C_REQ_DEINIT_PORT:
 			pCDCI2CInput->resp = CDC_I2C_RES_OK;
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET);
+			YellowDelay = 200;
 			break;
 			
 		case CDC_I2C_REQ_INIT_PORT:
