@@ -135,7 +135,7 @@ uint32_t XferDelay = 9600;
 uint32_t YellowDelay = 0;
 uint32_t RedLEDDelay = 0;
 /* USER CODE BEGIN PRIVATE_VARIABLES */
-static const char *g_fwVersion = "AUC-20180408";
+static const char *g_fwVersion = "AUC-20200308";
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -167,6 +167,8 @@ static int8_t CDC_DeInit_FS(void);
 static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length);
 static int8_t CDC_Receive_FS(uint8_t* pbuf, uint32_t *Len);
 
+static HAL_StatusTypeDef SWI2C_XferRead(uint8_t Addr, uint8_t * pData, uint8_t Length);
+static HAL_StatusTypeDef SWI2C_XferWrite(uint8_t Addr, uint8_t * pData, uint8_t Length);
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
 
 /* USER CODE END PRIVATE_FUNCTIONS_DECLARATION */
@@ -349,14 +351,9 @@ static void CDC_Delay(uint32_t Delay)
 	}
 }
 
-static void _SCL_Delay_Short(void)
+static inline void _Delay(volatile uint8_t count)
 {
-	__NOP();
-	__NOP();
-	__NOP();
-	__NOP();
-	__NOP();
-	__NOP();
+	while (count--);
 }
 
 static void _SCL_Delay(void)
@@ -368,12 +365,49 @@ static void _SCL_Delay(void)
 	__NOP();
 	__NOP();
 	__NOP();
+}
+
+static void _SCL_Delay_WH(void)
+{
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
 	__NOP();
 	__NOP();
 	__NOP();
 	__NOP();
 	__NOP();
 }
+
+static void _SCL_Delay_WL(void)
+{
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+	__NOP();
+}
+
+#define _SCL_Delay_RH()
+
+static void _SCL_Delay_RL(void)
+{
+	_Delay(1);
+}
+
 
 static inline void _SetSDAInput(void)
 {
@@ -396,8 +430,9 @@ static inline void _SetSDAOutput(void)
 
 static void _SWI2C_Start(void)
 {
-	HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
+	_SetSDAOutput();
 	HAL_GPIO_WritePin(IIC_SDA_PORT, IIC_SDA_PIN, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
 	_SCL_Delay();
 	HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_RESET);
 	_SCL_Delay();
@@ -415,13 +450,13 @@ static void _SWI2C_Stop(void)
 	HAL_GPIO_WritePin(IIC_SDA_PORT, IIC_SDA_PIN, GPIO_PIN_SET);
 }
 
-static HAL_StatusTypeDef _SWI2C_WriteByte(uint8_t Value)
+static HAL_StatusTypeDef _SWI2C_WriteByte(uint8_t Value,uint8_t NoWaitACK)
 {
 	uint8_t count;
-	
+
+	_SetSDAOutput();
 	for (count = 0;count < 8;count++)
 	{
-		_SCL_Delay_Short();
 		if (Value&0x80)
 		{
 			HAL_GPIO_WritePin(IIC_SDA_PORT, IIC_SDA_PIN, GPIO_PIN_SET);
@@ -430,67 +465,60 @@ static HAL_StatusTypeDef _SWI2C_WriteByte(uint8_t Value)
 		{
 			HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_RESET);
 		}
-		_SCL_Delay_Short();
+		_SCL_Delay_WL();
 		HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
-		_SCL_Delay();
+		_SCL_Delay_WH();
 		HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
 		Value = Value<<1;
 	}
+	//wait ACK
 	HAL_GPIO_WritePin(IIC_SDA_PORT, IIC_SDA_PIN, GPIO_PIN_SET);
 	_SetSDAInput();
 	HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
-	for (count = 0;count < 20;count++)
+	for (count = 0;count < 50;count++)
 	{
-		_SCL_Delay_Short();
-		if (HAL_GPIO_ReadPin(IIC_SDA_PORT, IIC_SDA_PIN) == 0)
+		_SCL_Delay();			
+		if (HAL_GPIO_ReadPin(IIC_SDA_PORT, IIC_SDA_PIN) == 0 || NoWaitACK)
 		{
 			HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
-			_SetSDAOutput();
 			return HAL_OK;
 		}
 	}
 	HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);	
-	_SetSDAOutput();
 	return HAL_ERROR;
 }
 
-static uint8_t _SWI2C_ReadByte(uint8_t SendAck)
+static uint8_t _SWI2C_ReadByte(uint8_t NoSendAck)
 {
 	uint8_t count, read, value = 0;
 
 	_SetSDAInput();
 	for (count = 0;count < 8;count++)
 	{
-		_SCL_Delay_Short();
 		HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
-		_SCL_Delay();
-		if (HAL_GPIO_ReadPin(IIC_SDA_PORT, IIC_SDA_PIN))
-		{
-			read = 1;
-		}
-		else
-		{
-			read = 0;
-		}
-		value = (value<<1)|read;
+		_SCL_Delay_RH();
+		read = HAL_GPIO_ReadPin(IIC_SDA_PORT, IIC_SDA_PIN);
 		HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
-		_SCL_Delay_Short();
-	}		
+		_SCL_Delay_RL();
+		value = (value<<1)|read;
+	}	
+	//send ACK
 	_SetSDAOutput();
-	if (SendAck)
+	if (NoSendAck)
 	{
-		HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_SET);
 	}
 	else
 	{
-		HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_SET);
-	}		
+		HAL_GPIO_WritePin(IIC_SDA_PORT,IIC_SDA_PIN, GPIO_PIN_RESET);
+	}
 	HAL_GPIO_WritePin(IIC_SCL_PORT, IIC_SCL_PIN, GPIO_PIN_SET);
 	_SCL_Delay();
 	HAL_GPIO_WritePin(IIC_SCL_PORT,IIC_SCL_PIN, GPIO_PIN_RESET);
 
 	return value;
 }
+
 
 static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pData, uint8_t Length, uint8_t Option)
 {
@@ -501,14 +529,14 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 
 	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
 	{
-		result = _SWI2C_WriteByte(Addr);
+		result = _SWI2C_WriteByte(Addr, 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
 			return result;
 		}
 
-		result = _SWI2C_WriteByte(SubAddr);
+		result = _SWI2C_WriteByte(SubAddr, 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
@@ -520,7 +548,7 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 
 	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) == 0)
 	{
-		result = _SWI2C_WriteByte(Addr|0x01);
+		result = _SWI2C_WriteByte(Addr|0x01, 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
@@ -530,10 +558,7 @@ static HAL_StatusTypeDef SWI2C_Read(uint8_t Addr, uint8_t SubAddr, uint8_t * pDa
 	
 	for (i = 0; i < Length; i++)
 	{
-		if (i == (Length - 1))
-			pData[i] = _SWI2C_ReadByte(0);
-		else
-			pData[i] = _SWI2C_ReadByte(1);
+		pData[i] = _SWI2C_ReadByte(i == (Length - 1) ? 1 : 0);
 	}
 	_SWI2C_Stop();
 	return result;
@@ -548,7 +573,7 @@ static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pD
 
 	if ((Option&CDC_I2C_TRANSFER_OPTIONS_NO_ADDRESS) == 0)
 	{
-		result = _SWI2C_WriteByte(Addr);
+		result = _SWI2C_WriteByte(Addr, 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
@@ -558,7 +583,7 @@ static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pD
 	
 	if ((Option&CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS) == CDC_I2C_TRANSFER_OPTIONS_SUB_ADDRESS)
 	{
-		result = _SWI2C_WriteByte(SubAddr);
+		result = _SWI2C_WriteByte(SubAddr, 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
@@ -568,7 +593,7 @@ static HAL_StatusTypeDef SWI2C_Write(uint8_t Addr, uint8_t SubAddr, uint8_t * pD
 	
 	for (i = 0; i < Length; i++)
 	{
-		result = _SWI2C_WriteByte(pData[i]);
+		result = _SWI2C_WriteByte(pData[i], i == (Length - 1) ? 1 : 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
@@ -586,7 +611,7 @@ static HAL_StatusTypeDef SWI2C_XferRead(uint8_t Addr, uint8_t * pData, uint8_t L
 	
 	_SWI2C_Start();
 
-	result = _SWI2C_WriteByte(Addr|0x01);
+	result = _SWI2C_WriteByte(Addr|0x01, 0);
 	if (result != HAL_OK)
 	{
 		_SWI2C_Stop();
@@ -595,10 +620,7 @@ static HAL_StatusTypeDef SWI2C_XferRead(uint8_t Addr, uint8_t * pData, uint8_t L
 	
 	for (i = 0; i < Length; i++)
 	{
-		if (i == (Length - 1))
-			pData[i] = _SWI2C_ReadByte(0);
-		else
-			pData[i] = _SWI2C_ReadByte(1);
+		pData[i] = _SWI2C_ReadByte(i == (Length - 1) ? 1 : 0);
 	}
 	_SWI2C_Stop();
 	return result;
@@ -611,7 +633,7 @@ static HAL_StatusTypeDef SWI2C_XferWrite(uint8_t Addr, uint8_t * pData, uint8_t 
 	
 	_SWI2C_Start();
 	
-	result = _SWI2C_WriteByte(Addr);
+	result = _SWI2C_WriteByte(Addr, 0);
 	if (result != HAL_OK)
 	{
 		_SWI2C_Stop();
@@ -620,7 +642,7 @@ static HAL_StatusTypeDef SWI2C_XferWrite(uint8_t Addr, uint8_t * pData, uint8_t 
 		
 	for (i = 0; i < Length; i++)
 	{
-		result = _SWI2C_WriteByte(pData[i]);
+		result = _SWI2C_WriteByte(pData[i], i == (Length - 1) ? 1 : 0);
 		if (result != HAL_OK)
 		{
 			_SWI2C_Stop();
@@ -654,7 +676,7 @@ void CDC_I2C_Process(IWDG_HandleTypeDef * pIWDG)
 	{
 		case CDC_I2C_REQ_RESET:
 			_SWI2C_Start();
-			_SWI2C_WriteByte(0xFF);
+			_SWI2C_WriteByte(0xFF, 0);
 			_SWI2C_Stop();
 			pCDCI2CInput->resp = CDC_I2C_RES_OK;
 			break;
